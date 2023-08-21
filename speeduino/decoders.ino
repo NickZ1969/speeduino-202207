@@ -482,13 +482,13 @@ void triggerPri_missingTooth()
       if( (configPage2.perToothIgn == true) && (!BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK)) ) 
       {
         int16_t crankAngle = ( (toothCurrentCount-1) * triggerToothAngle ) + configPage4.triggerAngle;
-        crankAngle = ignitionLimits(crankAngle);
         if( (configPage4.sparkMode == IGN_MODE_SEQUENTIAL) && (revolutionOne == true) && (configPage4.TrigSpeed == CRANK_SPEED) )
         {
           crankAngle += 360;
+          crankAngle = ignitionLimits(crankAngle);
           checkPerToothTiming(crankAngle, (configPage4.triggerTeeth + toothCurrentCount)); 
         }
-        else{ checkPerToothTiming(crankAngle, toothCurrentCount); }
+        else{ crankAngle = ignitionLimits(crankAngle); checkPerToothTiming(crankAngle, toothCurrentCount); }
       }
    }
 }
@@ -832,7 +832,7 @@ int getCrankAngle_DualWheel()
     crankAngle += timeToAngle(elapsedTime, CRANKMATH_METHOD_INTERVAL_REV);
 
     //Sequential check (simply sets whether we're on the first or 2nd revolution of the cycle)
-    if (tempRevolutionOne) { crankAngle += 360; }
+    if ( (tempRevolutionOne == true) && (configPage4.TrigSpeed == CRANK_SPEED) ) { crankAngle += 360; }
 
     if (crankAngle >= 720) { crankAngle -= 720; }
     if (crankAngle > CRANK_ANGLE_MAX) { crankAngle -= CRANK_ANGLE_MAX; }
@@ -1038,17 +1038,74 @@ void triggerSetEndTeeth_BasicDistributor()
   int tempEndAngle = (ignition1EndAngle - configPage4.triggerAngle);
   tempEndAngle = ignitionLimits((tempEndAngle));
 
+  switch(configPage2.nCylinders)
+  {
+    case 4:
+      if( (tempEndAngle > 180) || (tempEndAngle <= 0) )
+      {
+        ignition1EndTooth = 2;
+        ignition2EndTooth = 1;
+      }
+      else
+      {
+        ignition1EndTooth = 1;
+        ignition2EndTooth = 2;
+      }
+      break;
+    case 3: //Shared with 6 cylinder
+    case 6:
+      if( (tempEndAngle > 120) && (tempEndAngle <= 240) )
+      {
+        ignition1EndTooth = 2;
+        ignition2EndTooth = 3;
+        ignition3EndTooth = 1;
+      }
+      else if( (tempEndAngle > 240) || (tempEndAngle <= 0) )
+      {
+        ignition1EndTooth = 3;
+        ignition2EndTooth = 1;
+        ignition3EndTooth = 2;
+      }
+      else
+      {
+        ignition1EndTooth = 1;
+        ignition2EndTooth = 2;
+        ignition3EndTooth = 3;
+      }
+      break;
+    case 8:
+      if( (tempEndAngle > 90) && (tempEndAngle <= 180) )
+      {
+        ignition1EndTooth = 2;
+        ignition2EndTooth = 3;
+        ignition3EndTooth = 4;
+        ignition4EndTooth = 1;
+      }
+      else if( (tempEndAngle > 180) && (tempEndAngle <= 270) )
+      {
+        ignition1EndTooth = 3;
+        ignition2EndTooth = 4;
+        ignition3EndTooth = 1;
+        ignition4EndTooth = 2;
+      }
+      else if( (tempEndAngle > 270) || (tempEndAngle <= 0) )
+      {
+        ignition1EndTooth = 4;
+        ignition2EndTooth = 1;
+        ignition3EndTooth = 2;
+        ignition4EndTooth = 3;
+      }
+      else
+      {
+        ignition1EndTooth = 1;
+        ignition2EndTooth = 2;
+        ignition3EndTooth = 3;
+        ignition4EndTooth = 4;
+      }
+      break;
+  }
   
-  if( (tempEndAngle > 180) || (tempEndAngle <= 0) )
-  {
-    ignition1EndTooth = 2;
-    ignition2EndTooth = 1;
-  }
-  else
-  {
-    ignition1EndTooth = 1;
-    ignition2EndTooth = 2;
-  }
+
 
 
   lastToothCalcAdvance = currentStatus.advance;

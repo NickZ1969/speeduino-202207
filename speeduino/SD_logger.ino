@@ -242,13 +242,7 @@ void writeSDLogEntry()
     //Write the line to the ring buffer
     for(byte x=0; x<SD_LOG_NUM_FIELDS; x++)
     {
-      #if FPU_MAX_SIZE >= 32
-        float entryValue = getReadableFloatLogEntry(x);
-        if(IS_INTEGER(entryValue)) { rb.print((uint16_t)entryValue); }
-        else { rb.print(entryValue); }
-      #else
-        rb.print(getReadableLogEntry(x));
-      #endif
+      rb.print(getReadableLogEntry(x));
       if(x < (SD_LOG_NUM_FIELDS - 1)) { rb.print(","); }
     }
     rb.println("");

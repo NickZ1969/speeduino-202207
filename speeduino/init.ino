@@ -344,7 +344,6 @@ void initialiseAll()
     //initialiseDisplay();
     initialiseIdle(true);
     initialiseFan();
-    initialiseAirCon();
     initialiseAuxPWM();
     initialiseCorrections();
     BIT_CLEAR(currentStatus.engineProtectStatus, PROTECT_IO_ERROR); //Clear the I/O error bit. The bit will be set in initialiseADC() if there is problem in there.
@@ -800,13 +799,12 @@ void initialiseAll()
         channel4IgnDegrees = 270;
         maxIgnOutputs = 4;
 
-    #if IGN_CHANNELS >= 1
+
         if( (configPage4.sparkMode == IGN_MODE_SINGLE))
         {
-        maxIgnOutputs = 1;
-        CRANK_ANGLE_MAX_IGN = 90;
+          maxIgnOutputs = 4;
+          CRANK_ANGLE_MAX_IGN = 360;
         }
-    #endif
 
     #if IGN_CHANNELS >= 8
         if( (configPage4.sparkMode == IGN_MODE_SEQUENTIAL))
@@ -882,7 +880,7 @@ void initialiseAll()
     if(CRANK_ANGLE_MAX_IGN == CRANK_ANGLE_MAX_INJ) { CRANK_ANGLE_MAX = CRANK_ANGLE_MAX_IGN; } //If both the injector max and ignition max angles are the same, make the overall system max this value
     else if (CRANK_ANGLE_MAX_IGN > CRANK_ANGLE_MAX_INJ) { CRANK_ANGLE_MAX = CRANK_ANGLE_MAX_IGN; }
     else { CRANK_ANGLE_MAX = CRANK_ANGLE_MAX_INJ; }
-    currentStatus.status3 = currentStatus.nSquirts << BIT_STATUS3_NSQUIRTS1; //Top 3 bits of the status3 variable are the number of squirts. This must be done after the above section due to nSquirts being forced to 1 for sequential
+    currentStatus.status3 |= currentStatus.nSquirts << BIT_STATUS3_NSQUIRTS1; //Top 3 bits of the status3 variable are the number of squirts. This must be done after the above section due to nSquirts being forced to 1 for sequential
     
     //Special case:
     //3 or 5 squirts per cycle MUST be tracked over 720 degrees. This is because the angles for them (Eg 720/3=240) are not evenly divisible into 360
@@ -1331,6 +1329,7 @@ void setPinMapping(byte boardID)
       pinCoil5 = 34; //Pin for coil 5 PLACEHOLDER value for now
       pinTrigger = 19; //The CAS pin
       pinTrigger2 = 18; //The Cam Sensor pin
+      pinTrigger3 = 3; //The Cam sensor 2 pin
       pinTPS = A2;//TPS input pin
       pinMAP = A3; //MAP sensor pin
       pinIAT = A0; //IAT sensor pin
@@ -1372,6 +1371,31 @@ void setPinMapping(byte boardID)
         pinCoil4 = 29;
         pinCoil3 = 30;
         pinO2 = A22;
+      #elif defined(CORE_TEENSY41)
+        pinBaro = A4; 
+        pinMAP = A5;
+        pinTPS = A3; //TPS input pin
+        pinIAT = A0; //IAT sensor pin
+        pinCLT = A1; //CLS sensor pin
+        pinO2 = A2; //O2 Sensor pin
+        pinBat = A15; //Battery reference voltage pin. Needs Alpha4+
+        pinLaunch = 34; //Can be overwritten below
+        pinSpareTemp2 = A16; //WRONG! Needs updating!!
+        pinSpareTemp2 = A17; //WRONG! Needs updating!!
+
+        pinTrigger = 20; //The CAS pin
+        pinTrigger2 = 21; //The Cam Sensor pin
+
+        pinStepperDir = 34;
+        pinStepperStep = 35;
+        
+        pinCoil1 = 31;
+        pinCoil2 = 32;
+        pinCoil4 = 29;
+        pinCoil3 = 30;
+
+        pinTachOut = 28;
+        pinFan = 27;
       #elif defined(STM32F407xx)
      //Pin definitions for experimental board Tjeerd 
         //Black F407VE wiki.stm32duino.com/index.php?title=STM32F407
@@ -2102,7 +2126,7 @@ void setPinMapping(byte boardID)
       pinSpareHOut2 = 7; // high current output spare2
       pinSpareLOut1 = 21; //low current output spare1
       break;
-      
+
     case 52:
     //Pin mappings Teensy 8x8 shield
       pinTPS = A2;//TPS input pin
@@ -2143,7 +2167,7 @@ void setPinMapping(byte boardID)
       pinSpareLOut4 = 13; //Hardware In out Switched
       break;
  #endif
- 
+
     case 53:
     #ifndef SMALL_FLASH_MODE //No support for bluepill here anyway
       //Pin mappings as per Megapro
@@ -2282,8 +2306,7 @@ void setPinMapping(byte boardID)
       pinFlex = 2; // Flex sensor (Must be external interrupt enabled)
    #endif
       break;
-    
- 
+
     case 60:
         #if defined(STM32F407xx)
         //Pin definitions for experimental board Tjeerd 
@@ -2643,12 +2666,7 @@ void setPinMapping(byte boardID)
 
   //Currently there's no default pin for closed throttle position sensor
   pinCTPS = pinTranslate(configPage2.CTPSPin);
-  
-  // Air conditioning control initialisation
-  if (((configPage15.airConCompPin&63) != 0) && ((configPage15.airConCompPin&63) < BOARD_MAX_IO_PINS) ) { pinAirConComp = pinTranslate(configPage15.airConCompPin&63); }
-  if (((configPage15.airConFanPin&63) != 0) && ((configPage15.airConFanPin&63) < BOARD_MAX_IO_PINS) ) { pinAirConFan = pinTranslate(configPage15.airConFanPin&63); }
-  if (((configPage15.airConReqPin&63) != 0) && ((configPage15.airConReqPin&63) < BOARD_MAX_IO_PINS) ) { pinAirConRequest = pinTranslate(configPage15.airConReqPin&63); }
-  
+
   /* Reset control is a special case. If reset control is enabled, it needs its initial state set BEFORE its pinMode.
      If that doesn't happen and reset control is in "Serial Command" mode, the Arduino will end up in a reset loop
      because the control pin will go low as soon as the pinMode is set to OUTPUT. */
@@ -2858,32 +2876,6 @@ void setPinMapping(byte boardID)
       if (configPage10.wmiEmptyPolarity == 0) { pinMode(pinWMIEmpty, INPUT_PULLUP); } //Normal setting
       else { pinMode(pinWMIEmpty, INPUT); } //inverted setting
     }
-  } 
-
-  if((pinAirConComp>0) && ((configPage15.airConEnable&1) == 1))
-  {
-    pinMode(pinAirConComp, OUTPUT);
-  }
-
-  if((pinAirConRequest > 0) && ((configPage15.airConEnable&1) == 1) && (!pinIsOutput(pinAirConRequest)))
-  {
-    if((configPage15.airConReqPol&1) == 1)
-    {
-      // Inverted
-      // +5V is ON, Use external pull-down resistor for OFF
-      pinMode(pinAirConRequest, INPUT);
-    }
-    else
-    {
-      //Normal
-      // Pin pulled to Ground is ON. Floating (internally pulled up to +5V) is OFF.
-      pinMode(pinAirConRequest, INPUT_PULLUP);
-    }
-  }
-
-  if((pinAirConFan > 0) && ((configPage15.airConEnable&1) == 1) && ((configPage15.airConFanEnabled&1) == 1))
-  {
-    pinMode(pinAirConFan, OUTPUT);
   }  
 
   //These must come after the above pinMode statements
