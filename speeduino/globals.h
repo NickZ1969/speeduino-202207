@@ -892,7 +892,7 @@ struct config2 {
 
   byte canBMWCluster : 1;
   byte canVAGCluster : 1;
-  byte enableCluster1 : 1;
+  byte canHALCluster : 1;
   byte enableCluster2 : 1;
   byte vssAuxCh : 4;
 
